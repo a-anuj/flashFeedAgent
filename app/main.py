@@ -5,6 +5,19 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+import requests
+from fastapi import Request
+
+VERIFY_TOKEN = "flashFeedAgent"    # anything you want
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
+
+
+
 
 
 app = FastAPI(
@@ -12,6 +25,72 @@ app = FastAPI(
     description="Multi-agent RAG pipeline with LangGraph + News Scraper",
     version="1.0.0"
 )
+
+@app.get("/webhook")
+def verify(request: Request):
+    params = request.query_params
+    if params.get("hub.verify_token") == VERIFY_TOKEN:
+        return int(params.get("hub.challenge"))
+    return "Verification failed"
+
+
+def send_whatsapp_message(to, text):
+    url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
+
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {
+            "body": text
+        }
+    }
+
+    print("Sending payload:", payload)
+
+    response = requests.post(url, headers=headers, json=payload)
+    print("Response:", response.status_code, response.text)
+
+    return response.json()
+
+
+
+
+
+
+@app.post("/webhook")
+async def whatsapp_webhook(request: Request):
+    body = await request.json()
+
+    try:
+        message = body["entry"][0]["changes"][0]["value"]["messages"][0]
+        user_msg = message["text"]["body"]
+        user_id = message["from"]   # phone number
+    except:
+        return {"status": "ignored"}
+
+    ensure_memory_initialized(user_id)
+
+    # Call your Agentic RAG brain
+    result = brain.invoke(
+        {"question": user_msg,"history":[]},
+        config={"configurable": {"thread_id": user_id}}
+    )
+
+    answer = result.get("answer", "Sorry, I couldn't process that.")
+
+    send_whatsapp_message(user_id, answer)
+
+    return {"status": "sent"}
+
+
+
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,3 +158,4 @@ def refresh_news_job():
     print("News vectorstore updated.")
 
 scheduler.start()
+
