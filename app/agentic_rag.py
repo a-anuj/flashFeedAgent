@@ -372,3 +372,26 @@ print(result["needs_retrieval"])
 
 print(result["documents"])
 
+
+def rebuild_vectorstore():
+    global retriever
+    global vectorstore
+    global docs
+    global all_docs
+
+    print("Scraping fresh news...")
+
+    new_docs = []
+    for url in news_sites:
+        loader = RecursiveUrlLoader(url=url, max_depth=1, extractor=extract_text)
+        new_docs.extend(loader.load())
+
+    # Split docs
+    splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=500)
+    docs = splitter.split_documents(new_docs)
+
+    # Build FAISS
+    vectorstore = FAISS.from_documents(docs, embedding=emb)
+    retriever = vectorstore.as_retriever(k=5)
+
+    print("News scraping + vectorstore rebuilt successfully.")
