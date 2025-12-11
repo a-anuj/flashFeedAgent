@@ -317,7 +317,6 @@ memory = MemorySaver()
 
 app = workflow.compile(checkpointer=memory)
 
-app
 
 
 # In[137]:
