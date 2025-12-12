@@ -157,7 +157,9 @@ from functools import lru_cache
 def get_retriever():
     global all_docs
 
+    # 1. Validate scraped docs
     if not all_docs:
+        print("ERROR: all_docs is empty. Retriever unavailable.")
         return None
 
     splitter = RecursiveCharacterTextSplitter(
@@ -167,11 +169,21 @@ def get_retriever():
 
     docs = splitter.split_documents(all_docs)
 
+    # 2. Validate split docs
+    docs = [d for d in docs if d.page_content.strip()]
     if not docs:
+        print("ERROR: split docs empty. Retriever unavailable.")
         return None
 
-    vectorstore = FAISS.from_documents(docs, embedding=emb)
-    return vectorstore.as_retriever(k=5)
+    # 3. Try embedding safely
+    try:
+        vectorstore = FAISS.from_documents(docs, embedding=emb)
+        return vectorstore.as_retriever(k=5)
+
+    except Exception as e:
+        print("ERROR creating FAISS:", e)
+        return None
+
 
 
 # In[128]:
@@ -244,17 +256,22 @@ def decide_retrieval(state: AgentState) -> AgentState:
 # In[132]:
 
 
-def retrieve_documents(state:AgentState) -> AgentState:
+def retrieve_documents(state: AgentState) -> AgentState:
     question = state['question']
 
     retriever = get_retriever()
     if retriever is None:
+        print("Retriever unavailable. Returning no docs.")
         return {**state, "documents": []}
 
-    documents = retriever.invoke(question)
+    try:
+        documents = retriever.invoke(question)
+    except Exception as e:
+        print("Retriever invoke failed:", e)
+        documents = []
 
+    return {**state, "documents": documents}
 
-    return {**state,"documents":documents}
 
 
 # In[133]:
@@ -408,7 +425,7 @@ def rebuild_vectorstore():
             print(f"Error scraping {url}: {e}")
 
     if not new_docs:
-        print("ERROR: No documents scraped. Vectorstore not updated.")
+        print("ERROR: No documents scraped. Vectorstore NOT updated.")
         return
 
     # Split docs
@@ -416,17 +433,18 @@ def rebuild_vectorstore():
     docs = splitter.split_documents(new_docs)
 
     if not docs:
-        print("ERROR: After splitting, docs list is empty.")
+        print("ERROR: split docs empty. Vectorstore NOT updated.")
         return
 
-    # Generate embeddings SAFELY
+    # SAFELY build FAISS
     try:
         vectorstore = FAISS.from_documents(docs, embedding=emb)
         retriever = vectorstore.as_retriever(k=5)
-        print("News scraping + vectorstore rebuilt successfully.")
-
+        all_docs = new_docs
+        print("Vectorstore rebuilt successfully.")
     except Exception as e:
-        print("ERROR building FAISS vectorstore:", e)
+        print("ERROR building FAISS:", e)
         vectorstore = None
         retriever = None
+
 
