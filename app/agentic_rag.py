@@ -56,10 +56,13 @@ from langchain_core.documents import Document
 
 # In[82]:
 
+from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+import os
 
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-emb = HuggingFaceBgeEmbeddings(model_name="thenlper/gte-small")
-
+emb = HuggingFaceInferenceAPIEmbeddings(
+    api_key=os.getenv("HF_TOKEN"),
+    model_name="thenlper/gte-small"
+)
 
 # In[121]:
 
