@@ -22,5 +22,6 @@ langgraph
 tqdm
 requests
 
+APScheduler
 
 huggingface-hub
