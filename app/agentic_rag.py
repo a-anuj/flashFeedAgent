@@ -151,19 +151,27 @@ splitter = RecursiveCharacterTextSplitter(
     chunk_overlap=500
 )
 
-docs = splitter.split_documents(document)
+from functools import lru_cache
 
+@lru_cache
+def get_retriever():
+    global all_docs
 
-# In[126]:
+    if not all_docs:
+        return None
 
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=2000,
+        chunk_overlap=500
+    )
 
-vectorstore = FAISS.from_documents(docs,embedding=emb)
+    docs = splitter.split_documents(all_docs)
 
+    if not docs:
+        return None
 
-# In[127]:
-
-
-retriever = vectorstore.as_retriever(k=5)
+    vectorstore = FAISS.from_documents(docs, embedding=emb)
+    return vectorstore.as_retriever(k=5)
 
 
 # In[128]:
@@ -239,7 +247,12 @@ def decide_retrieval(state: AgentState) -> AgentState:
 def retrieve_documents(state:AgentState) -> AgentState:
     question = state['question']
 
+    retriever = get_retriever()
+    if retriever is None:
+        return {**state, "documents": []}
+
     documents = retriever.invoke(question)
+
 
     return {**state,"documents":documents}
 
@@ -383,15 +396,37 @@ def rebuild_vectorstore():
 
     new_docs = []
     for url in news_sites:
-        loader = RecursiveUrlLoader(url=url, max_depth=1, extractor=extract_text)
-        new_docs.extend(loader.load())
+        try:
+            loader = RecursiveUrlLoader(url=url, max_depth=1, extractor=extract_text)
+            loaded = loader.load()
+
+            # Filter out empty docs
+            loaded = [d for d in loaded if d.page_content.strip()]
+            new_docs.extend(loaded)
+
+        except Exception as e:
+            print(f"Error scraping {url}: {e}")
+
+    if not new_docs:
+        print("ERROR: No documents scraped. Vectorstore not updated.")
+        return
 
     # Split docs
     splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=500)
     docs = splitter.split_documents(new_docs)
 
-    # Build FAISS
-    vectorstore = FAISS.from_documents(docs, embedding=emb)
-    retriever = vectorstore.as_retriever(k=5)
+    if not docs:
+        print("ERROR: After splitting, docs list is empty.")
+        return
 
-    print("News scraping + vectorstore rebuilt successfully.")
+    # Generate embeddings SAFELY
+    try:
+        vectorstore = FAISS.from_documents(docs, embedding=emb)
+        retriever = vectorstore.as_retriever(k=5)
+        print("News scraping + vectorstore rebuilt successfully.")
+
+    except Exception as e:
+        print("ERROR building FAISS vectorstore:", e)
+        vectorstore = None
+        retriever = None
+
