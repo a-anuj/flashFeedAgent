@@ -1,5 +1,5 @@
-from app.agentic_rag import app as brain
-from app.agentic_rag import rebuild_vectorstore
+from agentic_rag import app as brain
+from agentic_rag import rebuild_vectorstore
 
 from fastapi import FastAPI
 from pydantic import BaseModel
