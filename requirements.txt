@@ -22,5 +22,5 @@ langgraph
 tqdm
 requests
 
-sentence-transformers
+
 huggingface-hub
