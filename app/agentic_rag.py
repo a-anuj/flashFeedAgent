@@ -5,10 +5,7 @@
 
 
 #pip install google-generativeai
-import sys
-sys.setrecursionlimit(100000)
-from IPython.core.interactiveshell import InteractiveShell
-InteractiveShell.ast_node_interactivity = "all"
+
 import pandas as pd
 pd.set_option('display.max_colwidth', None)
 
